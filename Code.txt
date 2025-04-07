@@ -32,6 +32,7 @@ Flask app:
 
 from flask import Flask
 from google.cloud import bigtable
+from google.cloud.bigtable.row import ConditionalRow
 
 btc = bigtable.Client(project= 'homework-3-455723', admin = True)
 instance = btc.instance('ev-bigtable')
@@ -58,11 +59,9 @@ def best_bmw():
     rows = table.read_rows()
     count = 0
     for row in rows:
-      try:
-        if (row.cell_value('ev_info', 'make') == b'BMW') and (int(row.cell_value('ev_info', 'electric_range')) > 100): #big table stores everything in bytes
+        #print(row.cells)
+        if (row.cell_value('ev_info', b'make') == b'BMW') and (float(row.cell_value('ev_info', b'electric_range').decode()) > 100): #big table stores everything in bytes
             count += 1
-      except KeyError: #bc i got missing make fields
-        continue
     return str(count)
 
 @app.route('/tesla-owners')
@@ -70,11 +69,8 @@ def tesla_owners():
     rows = table.read_rows()
     count = 0
     for row in rows:
-      try:
-        if (row.cell_value('ev_info', 'make') == b'Tesla') and (row.cell_value('ev_info', 'city') == b'Seattle'):
+        if (row.cell_value('ev_info', b'make') == b'TESLA') and (row.cell_value('ev_info', b'city') == b'Seattle'):
           count += 1
-      except KeyError: 
-        continue
     return str(count)
 
 @app.route('/update')
@@ -89,12 +85,10 @@ def delete():
     rows = table.read_rows()
     count = 0
     for row in rows:
-      try:
-        if (int(row.cell_value('ev_info', 'model_year')) < 2014):
-          todelete = ConditionalRow(row.row_key, table)
-          todelete.delete(state=True) 
-      except KeyError:
-        continue
+        if (float(row.cell_value('ev_info', b'model_year').decode()) < 2014):
+          direct_row = table.direct_row(row.row_key) #to be able to call delete
+          direct_row.delete()  
+          direct_row.commit()
     rows = table.read_rows() 
     count = 0
     for _ in rows:
@@ -103,4 +97,4 @@ def delete():
 
 #https://cloud.google.com/run/docs/quickstarts/build-and-deploy/deploy-python-service
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8080)
+    app.run(debug=True, host="0.0.0.0", port=80)
